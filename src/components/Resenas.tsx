@@ -13,12 +13,10 @@ type ResenasProps = {
 };
 
 export default function Resenas({ googleReviewsUrl }: ResenasProps) {
-  // 🔹 Mock de reseñas (puedes conectarlo a un backend en el futuro)
   const reviews: Review[] = [
     {
       name: "María López",
-      comment:
-        "El mejor sushi de Zapopan, los rollos empanizados son increíbles.",
+      comment: "El mejor sushi de Zapopan, los rollos empanizados son increíbles.",
       rating: 5,
     },
     {
@@ -28,8 +26,7 @@ export default function Resenas({ googleReviewsUrl }: ResenasProps) {
     },
     {
       name: "Ana Pérez",
-      comment:
-        "Muy buena relación calidad-precio, el té gratis en miércoles es un plus.",
+      comment: "Muy buena relación calidad-precio, el té gratis en miércoles es un plus.",
       rating: 5,
     },
   ];
@@ -41,7 +38,6 @@ export default function Resenas({ googleReviewsUrl }: ResenasProps) {
           Lo que dicen nuestros clientes
         </h2>
 
-        {/* Reseñas */}
         <div className="grid gap-6 md:grid-cols-3">
           {reviews.map((review, i) => (
             <div
@@ -49,19 +45,23 @@ export default function Resenas({ googleReviewsUrl }: ResenasProps) {
               className="relative rounded-2xl bg-card border border-line/60 p-6 text-left shadow hover:shadow-lg transition"
             >
               <Quote className="absolute top-4 right-4 h-5 w-5 text-accent/70" />
-              <div className="flex items-center gap-1 mb-2">
-                {Array.from({ length: review.rating }).map((_, i) => (
-                  <Star key={i} className="h-4 w-4 fill-accent text-accent" />
+              <div className="mb-2 flex items-center gap-1">
+                {Array.from({ length: review.rating }).map((_, j) => (
+                  <Star key={j} className="h-4 w-4 fill-accent text-accent" />
                 ))}
               </div>
-              <p className="text-sm text-muted mb-3">"{review.comment}"</p>
+
+              {/* ✅ Comillas tipográficas para evitar el warning */}
+              <p className="mb-3 text-sm text-muted">
+                &ldquo;{review.comment}&rdquo;
+              </p>
+
               <p className="text-sm font-bold">{review.name}</p>
             </div>
           ))}
         </div>
 
-        {/* CTA botones */}
-        <div className="mt-10 flex flex-col md:flex-row gap-4 justify-center">
+        <div className="mt-10 flex flex-col md:flex-row justify-center gap-4">
           <a
             href={googleReviewsUrl}
             target="_blank"

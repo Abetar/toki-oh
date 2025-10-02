@@ -1,67 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useSearchParams } from "next/navigation";
 
 /**
- * Menú interactivo (frontend-only) + carrito + WhatsApp
- * - Estilos locales (.theme-tokioh) con tokens CSS
- * - Botón "Ver carrito" -> #checkout (desktop y móvil)
- * - Param ?open=1/0 para simular horario abierto/cerrado
- * - Persistencia en localStorage
+ * Menú interactivo con estilos locales (Opción B)
+ * - Sin validación por horario (solo valida formulario)
+ * - Sticky CTA visible en móvil y desktop
  */
 
 const WHATSAPP_PHONE = "523317655504";
 
-// Horarios (24h): Dom, Lun-Jue, Vie-Sáb
-const OPENING_HOURS: Record<number, { open: string; close: string }> = {
-  0: { open: "13:00", close: "21:00" },
-  1: { open: "13:00", close: "22:30" },
-  2: { open: "13:00", close: "22:30" },
-  3: { open: "13:00", close: "22:30" },
-  4: { open: "13:00", close: "22:30" },
-  5: { open: "13:00", close: "23:30" },
-  6: { open: "13:00", close: "23:30" },
-};
+function currency(n: number) {
+  return `$ ${n} MXN`;
+}
 
-function parseTimeToDate(time: string, base = new Date()) {
-  const [h, m] = time.split(":").map(Number);
-  const d = new Date(base);
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-function isOpen(now = new Date()) {
-  const { open, close } = OPENING_HOURS[now.getDay()];
-  return (
-    now >= parseTimeToDate(open, now) && now <= parseTimeToDate(close, now)
-  );
-}
-function nextOpeningWindow(from = new Date()) {
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(from);
-    d.setDate(from.getDate() + i);
-    const s = OPENING_HOURS[d.getDay()];
-    if (!s) continue;
-    const start = parseTimeToDate(s.open, d);
-    const end = parseTimeToDate(s.close, d);
-    if (i === 0 && from < start)
-      return {
-        date: start,
-        dayName: d.toLocaleDateString(undefined, { weekday: "long" }),
-      };
-    if (i === 0 && from > end) continue;
-    if (i > 0)
-      return {
-        date: start,
-        dayName: d.toLocaleDateString(undefined, { weekday: "long" }),
-      };
-  }
-  return null;
-}
-const currency = (n: number) => `$ ${n} MXN`;
-
-// ===== DATA (catálogo) =====
+// ----------------- DATA -----------------
 type Tag = "NEW" | "BEST SELLER" | undefined;
 type Item = {
   id: string;
@@ -251,7 +205,6 @@ const MENU: Section[] = [
   },
 ];
 
-// ===== State & helpers =====
 interface CartItem {
   id: string;
   name: string;
@@ -269,38 +222,13 @@ const initialForm: FormState = { casa: "", recibe: "", coto: "", notas: "" };
 export default function WhatsAppOrderMenu() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [form, setForm] = useState<FormState>(initialForm);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Persistencia
-  useEffect(() => {
-    try {
-      const sc = localStorage.getItem("toki_cart");
-      const sf = localStorage.getItem("toki_form");
-      if (sc) setCart(JSON.parse(sc));
-      if (sf) setForm(JSON.parse(sf));
-    } catch {}
-    setHydrated(true);
-  }, []);
-  useEffect(() => {
-    if (hydrated) localStorage.setItem("toki_cart", JSON.stringify(cart));
-  }, [cart, hydrated]);
-  useEffect(() => {
-    if (hydrated) localStorage.setItem("toki_form", JSON.stringify(form));
-  }, [form, hydrated]);
 
   const subtotal = useMemo(
     () => cart.reduce((a, i) => a + i.price * i.qty, 0),
     [cart]
   );
 
-  // ---- PRUEBAS DE HORARIO ----
-  const params = useSearchParams();
-  const openParam = params?.get("open"); // '1' o '0'
-  const abierto =
-    openParam === "1" ? true : openParam === "0" ? false : isOpen();
-  const hasOverride = openParam === "1" || openParam === "0";
-  const nextOpen = nextOpeningWindow(new Date());
-
+  // Solo valida datos + que haya items
   const formValid =
     form.casa.trim() &&
     form.recibe.trim() &&
@@ -318,34 +246,38 @@ export default function WhatsAppOrderMenu() {
       return [...prev, { ...p, qty: 1 }];
     });
   }
-  const decItem = (id: string) =>
+  function decItem(id: string) {
     setCart((prev) =>
       prev
         .map((x) => (x.id === id ? { ...x, qty: x.qty - 1 } : x))
         .filter((x) => x.qty > 0)
     );
-  const incItem = (id: string) =>
+  }
+  function incItem(id: string) {
     setCart((prev) =>
       prev.map((x) => (x.id === id ? { ...x, qty: x.qty + 1 } : x))
     );
-  const removeItem = (id: string) =>
+  }
+  function removeItem(id: string) {
     setCart((prev) => prev.filter((x) => x.id !== id));
+  }
 
   function composeMessage() {
     const lines: string[] = [];
     lines.push("*Nuevo pedido Toki-oh!*", "");
+
+    // Agrupa por sección (más ordenado en WhatsApp)
     MENU.forEach((sec) => {
-      const itemsIn = cart.filter((c) =>
-        sec.items.some((it) => it.id === c.id)
-      );
-      if (itemsIn.length) {
+      const inSec = cart.filter((c) => sec.items.some((it) => it.id === c.id));
+      if (inSec.length) {
         lines.push(`*${sec.title}*`);
-        itemsIn.forEach((i) =>
+        inSec.forEach((i) =>
           lines.push(`• ${i.name} x${i.qty} — ${currency(i.price * i.qty)}`)
         );
         lines.push("");
       }
     });
+
     lines.push(
       `*Subtotal:* ${currency(subtotal)}`,
       "",
@@ -355,7 +287,7 @@ export default function WhatsAppOrderMenu() {
       `• Recibe: ${form.recibe}`
     );
     if (form.notas) lines.push(`• Notas: ${form.notas}`);
-    lines.push("", "¿Me confirmas el tiempo de entrega, por favor? 🙌");
+    lines.push("", "¿Me confirmas el tiempo de entrega, por favor?");
     return encodeURIComponent(lines.join("\n"));
   }
   const waHref = `https://wa.me/${WHATSAPP_PHONE}?text=${composeMessage()}`;
@@ -363,7 +295,7 @@ export default function WhatsAppOrderMenu() {
   return (
     <div className="theme-tokioh">
       {/* Estilos locales */}
-      <style jsx global>{`
+      <style jsx>{`
         .theme-tokioh {
           --bg: 12 12 14;
           --card: 17 19 24;
@@ -410,48 +342,6 @@ export default function WhatsAppOrderMenu() {
       `}</style>
 
       <div className="mx-auto max-w-6xl px-4 py-16">
-        {/* Estado de horario */}
-        <div className="mb-6 rounded-3xl border border-line/60 bg-card p-4">
-          {abierto ? (
-            <p className="text-fg">
-              ✅ Estamos abiertos. Puedes enviar tu pedido por WhatsApp.
-            </p>
-          ) : (
-            <p className="text-fg">
-              ⚠️ Ahora estamos fuera de horario.
-              {nextOpen ? (
-                <>
-                  {" "}
-                  Próxima apertura: <b>{nextOpen.dayName}</b> a las{" "}
-                  {nextOpen.date.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                  .
-                </>
-              ) : null}
-            </p>
-          )}
-          {(openParam === "1" || openParam === "0") && (
-            <p className="mt-2 text-xs text-muted">
-              (Modo prueba: horario forzado con <code>?open={openParam}</code>)
-            </p>
-          )}
-        </div>
-
-        {/* CTA arriba para ver carrito */}
-        {cart.length > 0 && (
-          <div className="mb-4">
-            <a
-              href="#checkout"
-              className="inline-flex items-center rounded-xl border border-line/60 px-3 py-2 text-sm font-semibold text-fg hover:bg-fg/5"
-            >
-              Ver carrito · {currency(subtotal)}
-            </a>
-          </div>
-        )}
-
-        {/* Menú */}
         <div className="space-y-12">
           {MENU.map((sec) => (
             <section key={sec.id}>
@@ -564,63 +454,57 @@ export default function WhatsAppOrderMenu() {
             </h3>
             <DeliveryForm form={form} setForm={setForm} />
             <a
-              href={abierto && formValid ? waHref : "#"}
+              href={formValid ? waHref : "#"}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => {
-                if (!abierto || !formValid) e.preventDefault();
+                if (!formValid) e.preventDefault();
               }}
               className={`mt-4 block w-full rounded-xl px-4 py-3 text-center text-sm font-semibold ${
-                abierto && formValid
+                formValid
                   ? "bg-fg text-bg hover:opacity-90"
                   : "bg-card opacity-50 cursor-not-allowed"
               }`}
-              aria-disabled={!abierto || !formValid}
+              aria-disabled={!formValid}
             >
               Enviar pedido por WhatsApp
             </a>
           </section>
-        </div>
 
-        {/* Sticky CTAs en móvil */}
-        <div className="md:hidden h-20" />
-        <div className="fixed bottom-0 inset-x-0 z-40 md:hidden">
-          <div className="mx-auto max-w-6xl px-4 py-3">
+          {/* Espaciador para que el sticky no tape el contenido final */}
+          {cart.length > 0 && <div className="h-24" />}
+        </div>
+      </div>
+
+      {/* Sticky (visible en TODAS las pantallas) */}
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-bg/80 backdrop-blur border-t border-line/60">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col sm:flex-row gap-2">
             <a
               href="#checkout"
-              className="mb-2 block w-full rounded-2xl border border-line/60 px-4 py-3 text-center font-bold text-fg bg-card/60 backdrop-blur hover:bg-card"
+              className="flex-1 rounded-2xl border border-line/60 px-4 py-3 text-center font-semibold text-fg bg-card/80 hover:bg-card"
             >
               Ver carrito · {currency(subtotal)}
             </a>
             <a
-              href={abierto && formValid ? waHref : "#"}
+              href={formValid ? waHref : "#"}
               onClick={(e) => {
-                if (!abierto || !formValid) e.preventDefault();
+                if (!formValid) e.preventDefault();
               }}
               target="_blank"
               rel="noopener noreferrer"
-              className={`block w-full rounded-2xl px-4 py-3 text-center font-bold ${
-                abierto && formValid
+              className={`flex-1 rounded-2xl px-4 py-3 text-center font-bold ${
+                formValid
                   ? "bg-fg text-bg"
                   : "bg-card opacity-50 cursor-not-allowed"
               }`}
-              aria-disabled={!abierto || !formValid}
+              aria-disabled={!formValid}
             >
               Enviar por WhatsApp
             </a>
           </div>
         </div>
-
-        {/* Botón flotante desktop */}
-        {cart.length > 0 && (
-          <a
-            href="#checkout"
-            className="hidden md:inline-flex fixed right-8 bottom-8 z-40 items-center rounded-full bg-fg text-bg px-5 py-3 font-bold shadow"
-          >
-            Ver carrito · {currency(subtotal)}
-          </a>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -629,8 +513,8 @@ function DeliveryForm({
   form,
   setForm,
 }: {
-  form: { casa: string; recibe: string; coto: string; notas: string };
-  setForm: (f: any) => void;
+  form: FormState;
+  setForm: (f: FormState) => void;
 }) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
